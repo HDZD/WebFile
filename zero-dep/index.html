@@ -386,6 +386,8 @@
     const RTC_CFG={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]};
     const ICE_TIMEOUT=6000;
     const CHUNK_SIZE=64*1024;
+    const HB_INTERVAL=5000;
+    const HB_TIMEOUT=15000;
 
     /* =========================================
        STATE
@@ -628,7 +630,7 @@
           const tr=S.transfers.get(tid);
           if(!tr||tr.status!=='active')return;
           const pr=S.peers.get(peerId);
-          if(!pr||!pr.dc||pr.dc.readyState!=='open'){tr.status='error';renderTransfers();return}
+          if(!pr||!pr.dc||pr.dc.readyState!=='open'){tr.status='error';renderTransfers();toast(`Transfer of ${tr.fileName} failed — peer disconnected`,'error');leaveSnd();return}
           if(off>=buf.byteLength){
             pr.dc.send(JSON.stringify({type:'file-complete',tid}));
             tr.status='complete';tr.xfer=tr.total;renderTransfers();completeSnd();return;
@@ -693,6 +695,13 @@
               p.dc.send(JSON.stringify({type:'hello',name:S.name,joinTime:S.joinTime,isReply:true}));
             }
             break;
+          case 'hb':
+            if(p)p._lastHb=Date.now();
+            if(p&&p.dc&&p.dc.readyState==='open')try{p.dc.send(JSON.stringify({type:'hb-ack'}))}catch(_){}
+            break;
+          case 'hb-ack':
+            if(p)p._lastHb=Date.now();
+            break;
           case 'bye':
             handleDisconnect(peerId);break;
           case 'file-offer':{
@@ -715,14 +724,39 @@
       }catch(_){}
     }
 
+    function startHeartbeat(pid){
+      const p=S.peers.get(pid);if(!p)return;
+      stopHeartbeat(pid);
+      p._lastHb=Date.now();
+      p._hbInterval=setInterval(()=>{
+        const pr=S.peers.get(pid);
+        if(!pr||!pr.dc||pr.dc.readyState!=='open'){clearInterval(pr?._hbInterval);return}
+        try{pr.dc.send(JSON.stringify({type:'hb'}))}catch(_){}
+        if(Date.now()-pr._lastHb>HB_TIMEOUT){
+          clearInterval(pr._hbInterval);pr._hbInterval=null;
+          handleDisconnect(pid);
+        }
+      },HB_INTERVAL);
+    }
+
+    function stopHeartbeat(pid){
+      const p=S.peers.get(pid);if(!p)return;
+      clearInterval(p._hbInterval);p._hbInterval=null;
+    }
+
     function handleDisconnect(pid){
       const p=S.peers.get(pid);if(!p)return;
+      stopHeartbeat(pid);
       if(p.dc)try{p.dc.close()}catch(_){}
       if(p.pc)try{p.pc.close()}catch(_){}
       const name=p.name||'Someone';
       S.peers.delete(pid);
-      for(const[,t]of S.transfers)if(t.peerId===pid&&t.status==='active')t.status='error';
-      if(S.inRoom){leaveSnd();toast(`${name} left`,'info');updateInfo();renderPeers();renderTransfers()}
+      let failCount=0;
+      for(const[,t]of S.transfers){if(t.peerId===pid&&t.status==='active'){t.status='error';failCount++}}
+      if(S.inRoom){
+        leaveSnd();toast(`${name} left`,'info');updateInfo();renderPeers();renderTransfers();
+        if(failCount>0)toast(`${failCount} transfer${failCount>1?'s':''} failed — ${name} disconnected`,'error');
+      }
     }
 
     /* =========================================
@@ -760,12 +794,13 @@
     }
 
     function setupPeer(pid,pc,dc,name){
-      const peerObj={name,joinTime:Date.now(),pc,dc,_greeted:false,_pendingChunkHeader:null};
+      const peerObj={name,joinTime:Date.now(),pc,dc,_greeted:false,_pendingChunkHeader:null,_lastHb:Date.now(),_hbInterval:null};
       S.peers.set(pid,peerObj);
 
       dc.binaryType='arraybuffer';
       dc.onopen=()=>{
         dc.send(JSON.stringify({type:'hello',name:S.name,joinTime:S.joinTime}));
+        startHeartbeat(pid);
       };
       dc.onmessage=(evt)=>handleDcMessage(pid,evt);
       dc.onclose=()=>handleDisconnect(pid);

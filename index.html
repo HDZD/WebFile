@@ -1298,6 +1298,8 @@
           if (!p || !p.dataConn || !p.dataConn.open) {
             t.status = 'error';
             renderTransfers();
+            showToast(`Transfer of ${t.fileName} failed — peer disconnected`, 'error');
+            playLeaveSound();
             return;
           }
 
@@ -1702,11 +1704,16 @@
       const name = peer.username || 'Someone';
       state.peers.delete(peerId);
 
-      // Mark active transfers as error
+      // Mark active transfers as error and notify
+      let failCount = 0;
       for (const [, t] of state.transfers) {
         if (t.peerId === peerId && t.status === 'active') {
           t.status = 'error';
+          failCount++;
         }
+      }
+      if (failCount > 0) {
+        showToast(`${failCount} transfer${failCount > 1 ? 's' : ''} failed — ${name} disconnected`, 'error');
       }
 
       if (state.isInRoom) {
