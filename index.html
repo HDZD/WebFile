@@ -1129,6 +1129,93 @@
     /* ===========================================
        TRANSFER UI
        =========================================== */
+    function getTransferData(t) {
+      const isSending = t.direction === 'send';
+      const pct = t.total > 0 ? Math.round((t.transferred / t.total) * 100) : 0;
+      let statusClass = isSending ? 'sending' : 'receiving';
+      let iconHtml = isSending ? ICON.upload : ICON.download;
+      let progressClass = '';
+      let metaText = '';
+
+      if (t.status === 'complete') {
+        statusClass = 'complete';
+        iconHtml = ICON.check;
+        progressClass = 'complete';
+        metaText = `${formatSize(t.total)} — Complete`;
+      } else if (t.status === 'error') {
+        statusClass = 'error';
+        iconHtml = ICON.x;
+        progressClass = 'error';
+        metaText = `${formatSize(t.transferred)} / ${formatSize(t.total)} — Failed`;
+      } else {
+        const speed = t.speed > 0 ? formatSpeed(t.speed) : '';
+        metaText = `${formatSize(t.transferred)} / ${formatSize(t.total)}`;
+        if (speed) metaText += ` <span class="dot"></span> ${speed}`;
+        metaText += ` <span class="dot"></span> ${pct}%`;
+      }
+
+      const peerName = t.peerName || 'Unknown';
+      const dirLabel = isSending ? `→ ${peerName}` : `← ${peerName}`;
+
+      let actionsHtml = '';
+      if (t.status === 'complete' && !isSending && t.blobUrl) {
+        actionsHtml = `<a class="dl-btn" href="${t.blobUrl}" download="${t.fileName}">${ICON.download} Save</a>`;
+      }
+
+      return { isSending, pct, statusClass, iconHtml, progressClass, metaText, dirLabel, actionsHtml };
+    }
+
+    function buildTransferCard(tid, t) {
+      const d = getTransferData(t);
+      return `<div class="transfer-card" data-tid="${tid}">
+            <div class="transfer-icon ${d.statusClass}">${d.iconHtml}</div>
+            <div class="transfer-info">
+              <div class="transfer-name" title="${t.fileName}">${t.fileName}</div>
+              <div class="transfer-meta">${d.dirLabel} <span class="dot"></span> ${d.metaText}</div>
+              ${t.status === 'active' ? `<div class="transfer-progress"><div class="transfer-progress-fill ${d.progressClass}" style="width:${d.pct}%"></div></div>` : ''}
+            </div>
+            <div class="transfer-actions">${d.actionsHtml}</div>
+          </div>`;
+    }
+
+    function updateTransferCard(card, tid, t) {
+      const d = getTransferData(t);
+
+      // Update icon
+      const iconEl = card.querySelector('.transfer-icon');
+      if (iconEl) {
+        iconEl.className = `transfer-icon ${d.statusClass}`;
+        iconEl.innerHTML = d.iconHtml;
+      }
+
+      // Update meta text
+      const metaEl = card.querySelector('.transfer-meta');
+      if (metaEl) metaEl.innerHTML = `${d.dirLabel} <span class="dot"></span> ${d.metaText}`;
+
+      // Update progress bar
+      const progressEl = card.querySelector('.transfer-progress-fill');
+      if (t.status === 'active') {
+        if (progressEl) {
+          progressEl.style.width = d.pct + '%';
+          progressEl.className = `transfer-progress-fill ${d.progressClass}`;
+        } else {
+          // Add progress bar if missing
+          const infoEl = card.querySelector('.transfer-info');
+          if (infoEl && !card.querySelector('.transfer-progress')) {
+            infoEl.insertAdjacentHTML('beforeend', `<div class="transfer-progress"><div class="transfer-progress-fill ${d.progressClass}" style="width:${d.pct}%"></div></div>`);
+          }
+        }
+      } else {
+        // Remove progress bar when complete/error
+        const progressWrap = card.querySelector('.transfer-progress');
+        if (progressWrap) progressWrap.remove();
+      }
+
+      // Update actions (download button appears on complete)
+      const actionsEl = card.querySelector('.transfer-actions');
+      if (actionsEl) actionsEl.innerHTML = d.actionsHtml;
+    }
+
     function renderTransfers() {
       const section = $('#transfers-section');
       const list = $('#transfers-list');
@@ -1139,54 +1226,24 @@
       }
 
       section.style.display = '';
-      const cards = [];
 
+      // Build a set of current transfer IDs
+      const currentTids = new Set(state.transfers.keys());
+
+      // Remove cards that no longer exist
+      list.querySelectorAll('.transfer-card').forEach(card => {
+        if (!currentTids.has(card.dataset.tid)) card.remove();
+      });
+
+      // Update existing cards in-place, add new ones
       for (const [tid, t] of state.transfers) {
-        const isSending = t.direction === 'send';
-        const pct = t.total > 0 ? Math.round((t.transferred / t.total) * 100) : 0;
-        let statusClass = isSending ? 'sending' : 'receiving';
-        let iconHtml = isSending ? ICON.upload : ICON.download;
-        let progressClass = '';
-        let metaText = '';
-
-        if (t.status === 'complete') {
-          statusClass = 'complete';
-          iconHtml = ICON.check;
-          progressClass = 'complete';
-          metaText = `${formatSize(t.total)} — Complete`;
-        } else if (t.status === 'error') {
-          statusClass = 'error';
-          iconHtml = ICON.x;
-          progressClass = 'error';
-          metaText = `${formatSize(t.transferred)} / ${formatSize(t.total)} — Failed`;
+        const existing = list.querySelector(`.transfer-card[data-tid="${tid}"]`);
+        if (existing) {
+          updateTransferCard(existing, tid, t);
         } else {
-          const speed = t.speed > 0 ? formatSpeed(t.speed) : '';
-          metaText = `${formatSize(t.transferred)} / ${formatSize(t.total)}`;
-          if (speed) metaText += ` <span class="dot"></span> ${speed}`;
-          metaText += ` <span class="dot"></span> ${pct}%`;
+          list.insertAdjacentHTML('beforeend', buildTransferCard(tid, t));
         }
-
-        const peerName = t.peerName || 'Unknown';
-        const dirLabel = isSending ? `→ ${peerName}` : `← ${peerName}`;
-
-        let actionsHtml = '';
-        if (t.status === 'complete' && !isSending && t.blobUrl) {
-          actionsHtml = `<a class="dl-btn" href="${t.blobUrl}" download="${t.fileName}">${ICON.download} Save</a>`;
-        }
-
-        cards.push(`
-          <div class="transfer-card" data-tid="${tid}">
-            <div class="transfer-icon ${statusClass}">${iconHtml}</div>
-            <div class="transfer-info">
-              <div class="transfer-name" title="${t.fileName}">${t.fileName}</div>
-              <div class="transfer-meta">${dirLabel} <span class="dot"></span> ${metaText}</div>
-              ${t.status === 'active' ? `<div class="transfer-progress"><div class="transfer-progress-fill ${progressClass}" style="width:${pct}%"></div></div>` : ''}
-            </div>
-            <div class="transfer-actions">${actionsHtml}</div>
-          </div>`);
       }
-
-      list.innerHTML = cards.join('');
     }
 
     /* ===========================================
