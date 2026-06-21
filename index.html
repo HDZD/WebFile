@@ -1,0 +1,1976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>WebFile — P2P File Transfer</title>
+    <meta name="description" content="Free peer-to-peer file transfer. Create a room, share the link, send files. No accounts, no uploads, no servers.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+    /* =============================================
+       RESET & CUSTOM PROPERTIES
+       ============================================= */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-deep: #060810;
+      --bg-primary: #0a0e1a;
+      --bg-elevated: #111627;
+      --bg-glass: rgba(14, 18, 34, 0.85);
+      --bg-glass-light: rgba(255, 255, 255, 0.035);
+      --bg-glass-lighter: rgba(255, 255, 255, 0.065);
+      --border-subtle: rgba(255, 255, 255, 0.06);
+      --border-medium: rgba(255, 255, 255, 0.1);
+      --accent: #3b82f6;
+      --accent-bright: #60a5fa;
+      --accent-dim: rgba(59, 130, 246, 0.12);
+      --accent-2: #06b6d4;
+      --accent-2-dim: rgba(6, 182, 212, 0.12);
+      --text-bright: #f1f5f9;
+      --text-primary: #cbd5e1;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --danger: #ef4444;
+      --danger-dim: rgba(239, 68, 68, 0.12);
+      --success: #22c55e;
+      --success-dim: rgba(34, 197, 94, 0.12);
+      --warning: #f59e0b;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-xl: 24px;
+      --radius-full: 9999px;
+      --t-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+      --t-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+      --t-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    /* =============================================
+       GLOBAL STYLES
+       ============================================= */
+    html, body { height: 100%; overflow: hidden; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: -50%;
+      width: 200%;
+      height: 200%;
+      background:
+        radial-gradient(ellipse at 25% 40%, rgba(59, 130, 246, 0.07) 0%, transparent 55%),
+        radial-gradient(ellipse at 75% 25%, rgba(6, 182, 212, 0.05) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(139, 92, 246, 0.04) 0%, transparent 50%);
+      animation: bgShift 25s ease-in-out infinite;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    @keyframes bgShift {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      33% { transform: translate(-3%, 2%) rotate(1deg); }
+      66% { transform: translate(2%, -3%) rotate(-1deg); }
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+    /* =============================================
+       SCREEN MANAGEMENT
+       ============================================= */
+    .screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity var(--t-slow), visibility var(--t-slow);
+    }
+    .screen.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    /* =============================================
+       JOIN SCREEN
+       ============================================= */
+    .join-card {
+      background: var(--bg-glass);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-xl);
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 420px;
+      margin: 16px;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
+      animation: cardIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(20px) scale(0.96); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .logo { text-align: center; margin-bottom: 36px; }
+    .logo-icon {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 16px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-radius: var(--radius-lg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 32px rgba(59, 130, 246, 0.25);
+    }
+    .logo-icon svg { width: 32px; height: 32px; color: white; }
+
+    .logo h1 {
+      font-size: 28px;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent-bright), var(--accent-2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.5px;
+    }
+    .logo p {
+      color: var(--text-secondary);
+      font-size: 14px;
+      margin-top: 4px;
+      font-weight: 400;
+    }
+
+    .form-group { margin-bottom: 20px; }
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .input {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--bg-glass-light);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      color: var(--text-bright);
+      font-family: var(--font);
+      font-size: 15px;
+      outline: none;
+      transition: border-color var(--t-fast), box-shadow var(--t-fast);
+    }
+    .input::placeholder { color: var(--text-muted); }
+    .input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border: none;
+      border-radius: var(--radius-md);
+      font-family: var(--font);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--t-fast);
+      outline: none;
+      white-space: nowrap;
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #2563eb);
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(59, 130, 246, 0.25);
+    }
+    .btn-primary:hover:not(:disabled) {
+      box-shadow: 0 6px 24px rgba(59, 130, 246, 0.35);
+      transform: translateY(-1px);
+    }
+    .btn-primary:active:not(:disabled) { transform: translateY(0); }
+
+    .btn-secondary {
+      background: var(--bg-glass-lighter);
+      color: var(--text-bright);
+      border: 1px solid var(--border-medium);
+    }
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .btn-danger {
+      background: var(--danger-dim);
+      color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+    .btn-danger:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.2);
+    }
+
+    .btn-full { width: 100%; }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin: 24px 0;
+      color: var(--text-muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border-subtle);
+    }
+
+    .join-row {
+      display: flex;
+      gap: 10px;
+    }
+    .join-row .input { flex: 1; }
+
+    .error-text {
+      color: var(--danger);
+      font-size: 13px;
+      margin-top: 8px;
+      min-height: 20px;
+    }
+
+    /* =============================================
+       ROOM SCREEN
+       ============================================= */
+    #room-screen {
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+    }
+
+    .room-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      background: var(--bg-glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-subtle);
+      z-index: 10;
+      flex-shrink: 0;
+    }
+
+    .room-info {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .room-code-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: var(--accent-dim);
+      border: 1px solid rgba(59, 130, 246, 0.15);
+      border-radius: var(--radius-full);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .copy-link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--bg-glass-light);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      font-family: var(--font);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all var(--t-fast);
+    }
+    .copy-link-btn:hover {
+      color: var(--text-bright);
+      border-color: var(--border-medium);
+      background: var(--bg-glass-lighter);
+    }
+    .copy-link-btn svg { width: 14px; height: 14px; }
+
+    .connection-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+      display: inline-block;
+      margin-right: 4px;
+    }
+
+    .peer-count {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    /* Main Content Area */
+    .room-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      padding-bottom: 100px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Peers Row */
+    .peers-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .peer-chip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: var(--bg-glass-light);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-full);
+      transition: all var(--t-normal);
+      animation: chipIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    @keyframes chipIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .peer-chip.is-self {
+      border-color: rgba(59, 130, 246, 0.2);
+    }
+    .peer-chip.transferring {
+      border-color: rgba(59, 130, 246, 0.4);
+      box-shadow: 0 0 16px rgba(59, 130, 246, 0.08);
+    }
+    .peer-chip-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      color: white;
+      flex-shrink: 0;
+    }
+    .peer-chip-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-bright);
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .peer-chip-badges {
+      display: flex;
+      gap: 4px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .badge-host {
+      background: rgba(251, 191, 36, 0.12);
+      color: #fbbf24;
+      border: 1px solid rgba(251, 191, 36, 0.2);
+    }
+    .badge-you {
+      background: var(--accent-dim);
+      color: var(--accent-bright);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+    }
+
+    /* Drop Zone */
+    .drop-zone {
+      border: 2px dashed var(--border-medium);
+      border-radius: var(--radius-xl);
+      padding: 48px 24px;
+      text-align: center;
+      transition: all var(--t-normal);
+      cursor: pointer;
+      position: relative;
+      background: var(--bg-glass-light);
+    }
+    .drop-zone:hover {
+      border-color: rgba(59, 130, 246, 0.3);
+      background: rgba(59, 130, 246, 0.04);
+    }
+    .drop-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(59, 130, 246, 0.08);
+      box-shadow: 0 0 40px rgba(59, 130, 246, 0.1);
+      transform: scale(1.01);
+    }
+    .drop-zone-icon {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 16px;
+      background: var(--accent-dim);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      transition: all var(--t-normal);
+    }
+    .drop-zone.dragover .drop-zone-icon {
+      transform: scale(1.1);
+      background: rgba(59, 130, 246, 0.2);
+    }
+    .drop-zone-icon svg { width: 28px; height: 28px; }
+    .drop-zone h3 {
+      color: var(--text-secondary);
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+    .drop-zone p {
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .drop-zone.no-peers h3 {
+      color: var(--text-muted);
+    }
+
+    /* Transfer List */
+    .transfers-section {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .transfers-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .transfers-header h3 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .clear-history-btn {
+      padding: 4px 10px;
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      font-family: var(--font);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all var(--t-fast);
+    }
+    .clear-history-btn:hover {
+      color: var(--text-secondary);
+      border-color: var(--border-medium);
+    }
+
+    .transfer-card {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 18px;
+      background: var(--bg-glass-light);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      transition: all var(--t-normal);
+      animation: cardPop 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    @keyframes cardPop {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .transfer-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .transfer-icon.sending {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+    .transfer-icon.receiving {
+      background: var(--accent-2-dim);
+      color: var(--accent-2);
+    }
+    .transfer-icon.complete {
+      background: var(--success-dim);
+      color: var(--success);
+    }
+    .transfer-icon.error {
+      background: var(--danger-dim);
+      color: var(--danger);
+    }
+    .transfer-icon svg { width: 20px; height: 20px; }
+
+    .transfer-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .transfer-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-bright);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .transfer-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .transfer-meta .dot {
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+
+    .transfer-progress {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 2px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+    .transfer-progress-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 150ms ease-out;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+    .transfer-progress-fill.complete {
+      background: var(--success);
+    }
+    .transfer-progress-fill.error {
+      background: var(--danger);
+    }
+
+    .transfer-actions {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .dl-btn {
+      padding: 6px 14px;
+      background: var(--success-dim);
+      border: 1px solid rgba(34, 197, 94, 0.2);
+      border-radius: var(--radius-sm);
+      color: var(--success);
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--t-fast);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .dl-btn:hover {
+      background: rgba(34, 197, 94, 0.2);
+    }
+    .dl-btn svg { width: 14px; height: 14px; }
+
+    /* Control Bar */
+    .control-bar {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-glass);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-full);
+      padding: 10px 20px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      z-index: 20;
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
+      animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    .ctrl-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: none;
+      background: var(--bg-glass-lighter);
+      color: var(--text-primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--t-fast);
+      position: relative;
+    }
+    .ctrl-btn svg { width: 20px; height: 20px; }
+    .ctrl-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--text-bright);
+    }
+    .ctrl-btn.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+    .ctrl-btn.active:hover {
+      background: rgba(59, 130, 246, 0.2);
+    }
+    .ctrl-btn.leave {
+      background: var(--danger);
+      color: white;
+    }
+    .ctrl-btn.leave:hover {
+      background: #dc2626;
+      box-shadow: 0 4px 16px rgba(239, 68, 68, 0.3);
+    }
+
+    .ctrl-divider {
+      width: 1px;
+      height: 24px;
+      background: var(--border-subtle);
+      margin: 0 4px;
+    }
+
+    /* =============================================
+       TOAST NOTIFICATIONS
+       ============================================= */
+    .toast-container {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .toast {
+      padding: 12px 20px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      transform: translateX(120%);
+      opacity: 0;
+      transition: all var(--t-normal);
+      pointer-events: auto;
+      max-width: 320px;
+    }
+    .toast.show {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    .toast-info { border-left: 3px solid var(--accent); }
+    .toast-success { border-left: 3px solid var(--success); }
+    .toast-warning { border-left: 3px solid var(--warning); }
+    .toast-error { border-left: 3px solid var(--danger); }
+
+    /* =============================================
+       SPINNER
+       ============================================= */
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid transparent;
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* =============================================
+       PARANOID LINK
+       ============================================= */
+    .paranoid-link-wrapper {
+      text-align: center;
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-subtle);
+    }
+    .paranoid-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 500;
+      text-decoration: none;
+      padding: 6px 14px;
+      border-radius: var(--radius-full);
+      transition: all var(--t-normal);
+      letter-spacing: 0.3px;
+    }
+    .paranoid-link svg {
+      width: 14px; height: 14px;
+      transition: transform var(--t-normal);
+    }
+    .paranoid-link:hover {
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+    .paranoid-link:hover svg { transform: scale(1.15); }
+
+    /* =============================================
+       RESPONSIVE
+       ============================================= */
+    @media (max-width: 768px) {
+      .join-card { padding: 32px 24px; }
+      .room-header { padding: 12px 16px; }
+      .room-info { gap: 10px; }
+      .room-content { padding: 16px; padding-bottom: 100px; }
+      .control-bar { padding: 8px 16px; }
+      .ctrl-btn { width: 40px; height: 40px; }
+      .drop-zone { padding: 32px 16px; }
+    }
+    @media (max-width: 480px) {
+      .room-info { flex-wrap: wrap; gap: 8px; }
+      .peer-count { display: none; }
+    }
+    </style>
+</head>
+<body>
+
+    <!-- ==========================================
+         JOIN SCREEN
+         ========================================== -->
+    <div id="join-screen" class="screen active">
+        <div class="join-card">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+                        <polyline points="13 2 13 9 20 9"/>
+                    </svg>
+                </div>
+                <h1>WebFile</h1>
+                <p>Peer-to-peer file transfer</p>
+            </div>
+
+            <div class="form-group">
+                <label for="username-input">Display Name</label>
+                <input type="text" id="username-input" class="input" placeholder="Enter your name" maxlength="20" autocomplete="off" spellcheck="false">
+            </div>
+
+            <button id="create-room-btn" class="btn btn-primary btn-full">
+                Create Room
+            </button>
+
+            <div class="divider">or join existing</div>
+
+            <div class="join-row">
+                <input type="text" id="room-code-input" class="input" placeholder="Room code" maxlength="10" autocomplete="off" spellcheck="false" style="text-transform: lowercase;">
+                <button id="join-room-btn" class="btn btn-secondary">Join</button>
+            </div>
+
+            <div id="join-error" class="error-text"></div>
+
+            <div class="paranoid-link-wrapper">
+                <a href="./zero-dep/" class="paranoid-link" title="Zero-dependency version — no external libraries, pure WebRTC">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    Paranoid?
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         ROOM SCREEN
+         ========================================== -->
+    <div id="room-screen" class="screen">
+        <header class="room-header">
+            <div class="room-info">
+                <div class="room-code-badge">
+                    <span class="connection-dot"></span>
+                    <span id="room-code-display">—</span>
+                </div>
+                <button id="copy-link-btn" class="copy-link-btn" title="Copy invite link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                    </svg>
+                    Copy Link
+                </button>
+                <span id="peer-count" class="peer-count"></span>
+            </div>
+        </header>
+
+        <div class="room-content">
+            <div id="peers-row" class="peers-row"></div>
+            <div id="drop-zone" class="drop-zone no-peers">
+                <div class="drop-zone-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                </div>
+                <h3>Drop files here or click to select</h3>
+                <p>Files are sent directly to connected peers</p>
+            </div>
+            <input type="file" id="file-input" multiple hidden>
+            <div id="transfers-section" class="transfers-section" style="display:none">
+                <div class="transfers-header">
+                    <h3>Transfers</h3>
+                    <button id="clear-history-btn" class="clear-history-btn">Clear</button>
+                </div>
+                <div id="transfers-list"></div>
+            </div>
+        </div>
+
+        <div class="control-bar">
+            <button id="pick-file-btn" class="ctrl-btn active" title="Send Files">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+            </button>
+            <div class="ctrl-divider"></div>
+            <button id="leave-btn" class="ctrl-btn leave" title="Leave Room">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- ==========================================
+         SCRIPTS
+         ========================================== -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script>
+    (function() {
+    'use strict';
+
+    /* ===========================================
+       SVG ICON TEMPLATES
+       =========================================== */
+    const ICON = {
+      upload: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
+      download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+      file: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>`,
+      check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+      x: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+      crown: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M2.5 18.5l2-11 5.5 4 2-6 2 6 5.5-4 2 11z"/></svg>`,
+      users: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+    };
+
+    /* ===========================================
+       CONFIGURATION
+       =========================================== */
+    const CONFIG = {
+      ROOM_PREFIX: 'wf-',
+      CHUNK_SIZE: 64 * 1024, // 64KB
+      HEARTBEAT_INTERVAL: 5000,
+      HEARTBEAT_TIMEOUT: 15000,
+      DISCONNECT_GRACE: 8000,
+      JOIN_TIMEOUT: 12000,
+      PEER_OPTIONS: {
+        debug: 0,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+          ]
+        }
+      },
+      CHARSET: 'abcdefghjkmnpqrstuvwxyz23456789',
+    };
+
+    /* ===========================================
+       APPLICATION STATE
+       =========================================== */
+    const state = {
+      username: '',
+      roomCode: '',
+      myPeerId: null,
+      joinTime: 0,
+      hostId: null,
+      personalPeer: null,
+      doorPeer: null,
+      peers: new Map(),       // peerId → { username, joinTime, dataConn, ... }
+      isInRoom: false,
+      helloSent: new Set(),
+      transfers: new Map(),   // transferId → { ... }
+      transferCounter: 0,
+    };
+
+    /* ===========================================
+       UTILITY FUNCTIONS
+       =========================================== */
+    function generateCode(len = 6) {
+      let code = '';
+      const arr = crypto.getRandomValues(new Uint8Array(len));
+      for (let i = 0; i < len; i++) code += CONFIG.CHARSET[arr[i] % CONFIG.CHARSET.length];
+      return code;
+    }
+
+    function sanitizeCode(raw) {
+      return raw.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10);
+    }
+
+    function doorId(code) {
+      return CONFIG.ROOM_PREFIX + code;
+    }
+
+    function getInitial(name) {
+      return (name || '?').charAt(0).toUpperCase();
+    }
+
+    function hashStr(s) {
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = s.charCodeAt(i) + ((h << 5) - h);
+      return h;
+    }
+
+    function avatarGradient(name) {
+      const h1 = Math.abs(hashStr(name) % 360);
+      const h2 = (h1 + 45) % 360;
+      return `linear-gradient(135deg, hsl(${h1}, 65%, 50%), hsl(${h2}, 60%, 40%))`;
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+    }
+
+    function formatSpeed(bytesPerSec) {
+      if (bytesPerSec < 1024) return bytesPerSec.toFixed(0) + ' B/s';
+      if (bytesPerSec < 1024 * 1024) return (bytesPerSec / 1024).toFixed(1) + ' KB/s';
+      return (bytesPerSec / (1024 * 1024)).toFixed(1) + ' MB/s';
+    }
+
+    function genTransferId() {
+      return state.myPeerId + '-' + (++state.transferCounter);
+    }
+
+    /* ===========================================
+       SOUND EFFECTS
+       =========================================== */
+    function playTone(freq, dur, vol = 0.08) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = freq;
+        osc.type = 'sine';
+        gain.gain.value = vol;
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+        osc.stop(ctx.currentTime + dur);
+        setTimeout(() => ctx.close(), dur * 1000 + 200);
+      } catch(_) {}
+    }
+
+    function playJoinSound() { playTone(880, 0.15); setTimeout(() => playTone(1100, 0.12), 100); }
+    function playLeaveSound() { playTone(600, 0.15); setTimeout(() => playTone(440, 0.18), 100); }
+    function playCompleteSound() { playTone(523, 0.1); setTimeout(() => playTone(659, 0.1), 80); setTimeout(() => playTone(784, 0.12), 160); }
+
+    /* ===========================================
+       TOAST NOTIFICATIONS
+       =========================================== */
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      requestAnimationFrame(() => requestAnimationFrame(() => toast.classList.add('show')));
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    /* ===========================================
+       UI RENDERING
+       =========================================== */
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => document.querySelectorAll(sel);
+
+    function showScreen(id) {
+      $$('.screen').forEach(s => s.classList.remove('active'));
+      $(`#${id}`).classList.add('active');
+    }
+
+    function updateRoomInfo() {
+      $('#room-code-display').textContent = state.roomCode.toUpperCase();
+      const total = state.peers.size + 1;
+      $('#peer-count').textContent = `${total} ${total === 1 ? 'person' : 'people'}`;
+      // Update drop zone state
+      const dz = $('#drop-zone');
+      dz.classList.toggle('no-peers', state.peers.size === 0);
+    }
+
+    function renderPeers() {
+      const container = $('#peers-row');
+      const allPeers = [];
+
+      allPeers.push({
+        id: 'self',
+        username: state.username,
+        isHost: state.hostId === state.myPeerId,
+        isSelf: true,
+      });
+
+      for (const [pid, p] of state.peers) {
+        allPeers.push({
+          id: pid,
+          username: p.username || 'Connecting...',
+          isHost: state.hostId === pid,
+          isSelf: false,
+        });
+      }
+
+      container.innerHTML = allPeers.map(p => {
+        const classes = ['peer-chip'];
+        if (p.isSelf) classes.push('is-self');
+
+        const badges = [];
+        if (p.isHost) badges.push(`<span class="badge badge-host">${ICON.crown} Host</span>`);
+        if (p.isSelf) badges.push(`<span class="badge badge-you">You</span>`);
+
+        return `
+          <div class="${classes.join(' ')}" data-peer-id="${p.id}">
+            <div class="peer-chip-avatar" style="background: ${avatarGradient(p.username)}">${getInitial(p.username)}</div>
+            <span class="peer-chip-name" title="${p.username}">${p.username}</span>
+            <div class="peer-chip-badges">${badges.join('')}</div>
+          </div>`;
+      }).join('');
+    }
+
+    /* ===========================================
+       TRANSFER UI
+       =========================================== */
+    function renderTransfers() {
+      const section = $('#transfers-section');
+      const list = $('#transfers-list');
+
+      if (state.transfers.size === 0) {
+        section.style.display = 'none';
+        return;
+      }
+
+      section.style.display = '';
+      const cards = [];
+
+      for (const [tid, t] of state.transfers) {
+        const isSending = t.direction === 'send';
+        const pct = t.total > 0 ? Math.round((t.transferred / t.total) * 100) : 0;
+        let statusClass = isSending ? 'sending' : 'receiving';
+        let iconHtml = isSending ? ICON.upload : ICON.download;
+        let progressClass = '';
+        let metaText = '';
+
+        if (t.status === 'complete') {
+          statusClass = 'complete';
+          iconHtml = ICON.check;
+          progressClass = 'complete';
+          metaText = `${formatSize(t.total)} — Complete`;
+        } else if (t.status === 'error') {
+          statusClass = 'error';
+          iconHtml = ICON.x;
+          progressClass = 'error';
+          metaText = `${formatSize(t.transferred)} / ${formatSize(t.total)} — Failed`;
+        } else {
+          const speed = t.speed > 0 ? formatSpeed(t.speed) : '';
+          metaText = `${formatSize(t.transferred)} / ${formatSize(t.total)}`;
+          if (speed) metaText += ` <span class="dot"></span> ${speed}`;
+          metaText += ` <span class="dot"></span> ${pct}%`;
+        }
+
+        const peerName = t.peerName || 'Unknown';
+        const dirLabel = isSending ? `→ ${peerName}` : `← ${peerName}`;
+
+        let actionsHtml = '';
+        if (t.status === 'complete' && !isSending && t.blobUrl) {
+          actionsHtml = `<a class="dl-btn" href="${t.blobUrl}" download="${t.fileName}">${ICON.download} Save</a>`;
+        }
+
+        cards.push(`
+          <div class="transfer-card" data-tid="${tid}">
+            <div class="transfer-icon ${statusClass}">${iconHtml}</div>
+            <div class="transfer-info">
+              <div class="transfer-name" title="${t.fileName}">${t.fileName}</div>
+              <div class="transfer-meta">${dirLabel} <span class="dot"></span> ${metaText}</div>
+              ${t.status === 'active' ? `<div class="transfer-progress"><div class="transfer-progress-fill ${progressClass}" style="width:${pct}%"></div></div>` : ''}
+            </div>
+            <div class="transfer-actions">${actionsHtml}</div>
+          </div>`);
+      }
+
+      list.innerHTML = cards.join('');
+    }
+
+    /* ===========================================
+       FILE TRANSFER PROTOCOL
+       =========================================== */
+    function sendFileToPeer(file, peerId) {
+      const peer = state.peers.get(peerId);
+      if (!peer || !peer.dataConn || !peer.dataConn.open) return;
+
+      const tid = genTransferId();
+      const transfer = {
+        id: tid,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        total: file.size,
+        transferred: 0,
+        direction: 'send',
+        status: 'active',
+        speed: 0,
+        peerName: peer.username || 'Unknown',
+        peerId: peerId,
+        startTime: Date.now(),
+        lastSpeedTime: Date.now(),
+        lastSpeedBytes: 0,
+      };
+
+      state.transfers.set(tid, transfer);
+      renderTransfers();
+
+      // Send file offer
+      peer.dataConn.send({
+        type: 'file-offer',
+        tid: tid,
+        name: file.name,
+        size: file.size,
+        mime: file.type,
+      });
+
+      // Read and send chunks
+      const reader = new FileReader();
+      reader.onload = function() {
+        const buffer = reader.result;
+        let offset = 0;
+        const chunkSize = CONFIG.CHUNK_SIZE;
+
+        function sendNextChunk() {
+          const t = state.transfers.get(tid);
+          if (!t || t.status !== 'active') return;
+
+          const p = state.peers.get(peerId);
+          if (!p || !p.dataConn || !p.dataConn.open) {
+            t.status = 'error';
+            renderTransfers();
+            return;
+          }
+
+          if (offset >= buffer.byteLength) {
+            // All chunks sent
+            p.dataConn.send({ type: 'file-complete', tid: tid });
+            t.status = 'complete';
+            t.transferred = t.total;
+            renderTransfers();
+            playCompleteSound();
+            return;
+          }
+
+          const end = Math.min(offset + chunkSize, buffer.byteLength);
+          const chunk = buffer.slice(offset, end);
+
+          p.dataConn.send({
+            type: 'file-chunk',
+            tid: tid,
+            data: chunk,
+            offset: offset,
+          });
+
+          offset = end;
+          t.transferred = offset;
+
+          // Speed calculation
+          const now = Date.now();
+          const elapsed = (now - t.lastSpeedTime) / 1000;
+          if (elapsed >= 0.5) {
+            t.speed = (t.transferred - t.lastSpeedBytes) / elapsed;
+            t.lastSpeedTime = now;
+            t.lastSpeedBytes = t.transferred;
+          }
+
+          renderTransfers();
+
+          // Flow control: small delay to prevent overwhelming the data channel
+          // Use bufferedAmount for backpressure if available
+          const dc = p.dataConn._dc || p.dataConn.dataChannel;
+          if (dc && dc.bufferedAmount > 1024 * 1024) {
+            setTimeout(sendNextChunk, 50);
+          } else {
+            setTimeout(sendNextChunk, 0);
+          }
+        }
+
+        sendNextChunk();
+      };
+
+      reader.readAsArrayBuffer(file);
+    }
+
+    function sendFilesToAllPeers(files) {
+      if (state.peers.size === 0) {
+        showToast('No peers connected', 'warning');
+        return;
+      }
+
+      for (const file of files) {
+        for (const [peerId] of state.peers) {
+          sendFileToPeer(file, peerId);
+        }
+      }
+    }
+
+    function handleFileOffer(peerId, data) {
+      const peer = state.peers.get(peerId);
+      const tid = data.tid;
+
+      const transfer = {
+        id: tid,
+        fileName: data.name,
+        fileSize: data.size,
+        fileType: data.mime,
+        total: data.size,
+        transferred: 0,
+        direction: 'receive',
+        status: 'active',
+        speed: 0,
+        peerName: peer?.username || 'Unknown',
+        peerId: peerId,
+        chunks: [],
+        startTime: Date.now(),
+        lastSpeedTime: Date.now(),
+        lastSpeedBytes: 0,
+        blobUrl: null,
+      };
+
+      state.transfers.set(tid, transfer);
+      renderTransfers();
+      showToast(`Receiving ${data.name} from ${transfer.peerName}`, 'info');
+    }
+
+    function handleFileChunk(peerId, data) {
+      const t = state.transfers.get(data.tid);
+      if (!t || t.status !== 'active') return;
+
+      t.chunks.push(data.data);
+      t.transferred = data.offset + data.data.byteLength;
+
+      // Speed calculation
+      const now = Date.now();
+      const elapsed = (now - t.lastSpeedTime) / 1000;
+      if (elapsed >= 0.5) {
+        t.speed = (t.transferred - t.lastSpeedBytes) / elapsed;
+        t.lastSpeedTime = now;
+        t.lastSpeedBytes = t.transferred;
+      }
+
+      renderTransfers();
+    }
+
+    function handleFileComplete(peerId, data) {
+      const t = state.transfers.get(data.tid);
+      if (!t) return;
+
+      t.status = 'complete';
+      t.transferred = t.total;
+
+      // Assemble blob
+      const blob = new Blob(t.chunks, { type: t.fileType || 'application/octet-stream' });
+      t.blobUrl = URL.createObjectURL(blob);
+      t.chunks = []; // Free memory
+
+      renderTransfers();
+      playCompleteSound();
+      showToast(`${t.fileName} received!`, 'success');
+    }
+
+    /* ===========================================
+       PEERJS SIGNALING
+       =========================================== */
+    function createPersonalPeer() {
+      return new Promise((resolve, reject) => {
+        const id = CONFIG.ROOM_PREFIX + generateCode(8);
+        const peer = new Peer(id, CONFIG.PEER_OPTIONS);
+        const timeout = setTimeout(() => { peer.destroy(); reject(new Error('Connection timed out')); }, CONFIG.JOIN_TIMEOUT);
+
+        peer.on('open', (myId) => {
+          clearTimeout(timeout);
+          state.myPeerId = myId;
+          state.personalPeer = peer;
+          resolve(peer);
+        });
+
+        peer.on('error', (err) => {
+          clearTimeout(timeout);
+          if (err.type === 'unavailable-id') {
+            peer.destroy();
+            createPersonalPeer().then(resolve).catch(reject);
+          } else {
+            reject(err);
+          }
+        });
+
+        peer.on('connection', (dataConn) => handleIncomingData(dataConn));
+        peer.on('disconnected', () => {
+          if (state.isInRoom && !peer.destroyed) {
+            setTimeout(() => { try { peer.reconnect(); } catch(_){} }, 2000);
+          }
+        });
+      });
+    }
+
+    function createDoorPeer(code) {
+      return new Promise((resolve, reject) => {
+        const id = doorId(code);
+        const peer = new Peer(id, CONFIG.PEER_OPTIONS);
+        const timeout = setTimeout(() => { peer.destroy(); reject(new Error('Room creation timed out')); }, CONFIG.JOIN_TIMEOUT);
+
+        peer.on('open', () => {
+          clearTimeout(timeout);
+          state.doorPeer = peer;
+          resolve(peer);
+        });
+
+        peer.on('error', (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+
+        peer.on('connection', (dataConn) => handleDoorConnection(dataConn));
+      });
+    }
+
+    function handleDoorConnection(conn) {
+      conn.on('open', () => {
+        conn.on('data', (data) => {
+          if (data.type === 'join-request') {
+            const peerList = [];
+            peerList.push({
+              id: state.myPeerId,
+              username: state.username,
+              joinTime: state.joinTime,
+            });
+            for (const [pid, p] of state.peers) {
+              peerList.push({
+                id: pid,
+                username: p.username,
+                joinTime: p.joinTime,
+              });
+            }
+            conn.send({
+              type: 'welcome',
+              peers: peerList,
+              hostId: state.hostId,
+              roomCode: state.roomCode,
+            });
+          }
+        });
+      });
+    }
+
+    function handleIncomingData(conn) {
+      const peerId = conn.peer;
+
+      conn.on('open', () => {
+        const existing = state.peers.get(peerId);
+        if (existing) {
+          if (existing.dataConn && existing.dataConn !== conn) {
+            try { existing.dataConn.close(); } catch(_) {}
+          }
+          existing.dataConn = conn;
+        } else {
+          state.peers.set(peerId, {
+            username: null,
+            joinTime: 0,
+            dataConn: conn,
+          });
+        }
+        startHeartbeat(peerId);
+      });
+
+      conn.on('data', (data) => handlePeerMessage(peerId, data));
+      conn.on('close', () => {
+        const p = state.peers.get(peerId);
+        if (!p || p.dataConn === conn) handlePeerDisconnect(peerId);
+      });
+      conn.on('error', () => {
+        const p = state.peers.get(peerId);
+        if (!p || p.dataConn === conn) handlePeerDisconnect(peerId);
+      });
+    }
+
+    function connectToPeer(peerId) {
+      if (!state.personalPeer || state.peers.has(peerId)) return;
+
+      const dataConn = state.personalPeer.connect(peerId, { reliable: true });
+      state.peers.set(peerId, {
+        username: null,
+        joinTime: 0,
+        dataConn: dataConn,
+      });
+
+      dataConn.on('open', () => {
+        startHeartbeat(peerId);
+        state.helloSent.add(peerId);
+        dataConn.send({
+          type: 'hello',
+          username: state.username,
+          joinTime: state.joinTime,
+        });
+      });
+
+      dataConn.on('data', (data) => handlePeerMessage(peerId, data));
+      dataConn.on('close', () => {
+        const p = state.peers.get(peerId);
+        if (!p || p.dataConn === dataConn) handlePeerDisconnect(peerId);
+      });
+      dataConn.on('error', () => {
+        const p = state.peers.get(peerId);
+        if (!p || p.dataConn === dataConn) handlePeerDisconnect(peerId);
+      });
+    }
+
+    function connectToPeerDirect(peerId) {
+      const peer = state.peers.get(peerId);
+      if (!peer || !state.personalPeer) return;
+
+      const dataConn = state.personalPeer.connect(peerId, { reliable: true });
+      peer.dataConn = dataConn;
+
+      dataConn.on('open', () => {
+        startHeartbeat(peerId);
+        state.helloSent.add(peerId);
+        dataConn.send({
+          type: 'hello',
+          username: state.username,
+          joinTime: state.joinTime,
+        });
+      });
+
+      dataConn.on('data', (data) => handlePeerMessage(peerId, data));
+      dataConn.on('close', () => {
+        const p = state.peers.get(peerId);
+        if (!p || p.dataConn === dataConn) handlePeerDisconnect(peerId);
+      });
+      dataConn.on('error', () => {
+        const p = state.peers.get(peerId);
+        if (!p || p.dataConn === dataConn) handlePeerDisconnect(peerId);
+      });
+    }
+
+    /* ===========================================
+       PEER MESSAGE HANDLING
+       =========================================== */
+    function handlePeerMessage(peerId, data) {
+      let peer = state.peers.get(peerId);
+      if (!peer) return;
+
+      switch (data.type) {
+        case 'hello': {
+          const isNew = !peer.username;
+          peer.username = data.username;
+          peer.joinTime = data.joinTime;
+          if (isNew) {
+            playJoinSound();
+            showToast(`${data.username} joined`, 'info');
+          }
+          updateRoomInfo();
+          renderPeers();
+          if (!data.isReply && !state.helloSent.has(peerId) && peer.dataConn && peer.dataConn.open) {
+            state.helloSent.add(peerId);
+            peer.dataConn.send({
+              type: 'hello',
+              username: state.username,
+              joinTime: state.joinTime,
+              isReply: true,
+            });
+          }
+          break;
+        }
+
+        case 'bye':
+          handlePeerDisconnect(peerId);
+          break;
+
+        case 'hb':
+          if (peer) peer._lastHbResponse = Date.now();
+          if (peer?.dataConn?.open) try { peer.dataConn.send({ type: 'hb-ack' }); } catch(_) {}
+          break;
+
+        case 'hb-ack':
+          if (peer) peer._lastHbResponse = Date.now();
+          break;
+
+        case 'host-changed': {
+          state.hostId = data.hostId;
+          const hostPeer = state.peers.get(data.hostId);
+          const hostName = data.hostId === state.myPeerId ? 'You' : (hostPeer?.username || 'Someone');
+          showToast(`${hostName} ${data.hostId === state.myPeerId ? 'are' : 'is'} now the host`, 'info');
+          renderPeers();
+          break;
+        }
+
+        // File transfer messages
+        case 'file-offer':
+          handleFileOffer(peerId, data);
+          break;
+
+        case 'file-chunk':
+          handleFileChunk(peerId, data);
+          break;
+
+        case 'file-complete':
+          handleFileComplete(peerId, data);
+          break;
+      }
+    }
+
+    /* ===========================================
+       HEARTBEAT & DISCONNECT
+       =========================================== */
+    function startHeartbeat(peerId) {
+      const p = state.peers.get(peerId); if (!p) return;
+      clearInterval(p._hbInterval); clearTimeout(p._hbTimeout);
+      p._lastHbResponse = Date.now();
+      p._hbInterval = setInterval(() => {
+        const pr = state.peers.get(peerId);
+        if (!pr || !pr.dataConn?.open) { clearInterval(pr?._hbInterval); return; }
+        try { pr.dataConn.send({ type: 'hb' }); } catch(_) {}
+        if (Date.now() - pr._lastHbResponse > CONFIG.HEARTBEAT_TIMEOUT) {
+          clearInterval(pr._hbInterval); pr._hbInterval = null;
+          handlePeerDisconnect(peerId);
+        }
+      }, CONFIG.HEARTBEAT_INTERVAL);
+    }
+
+    function stopHeartbeat(peerId) {
+      const p = state.peers.get(peerId); if (!p) return;
+      clearInterval(p._hbInterval); p._hbInterval = null;
+    }
+
+    function handlePeerDisconnect(peerId) {
+      const peer = state.peers.get(peerId);
+      if (!peer) return;
+
+      stopHeartbeat(peerId);
+      if (peer.dataConn) { try { peer.dataConn.close(); } catch(_) {} }
+
+      const name = peer.username || 'Someone';
+      state.peers.delete(peerId);
+
+      // Mark active transfers as error
+      for (const [, t] of state.transfers) {
+        if (t.peerId === peerId && t.status === 'active') {
+          t.status = 'error';
+        }
+      }
+
+      if (state.isInRoom) {
+        playLeaveSound();
+        showToast(`${name} left`, 'info');
+        updateRoomInfo();
+        renderPeers();
+        renderTransfers();
+
+        if (peerId === state.hostId) {
+          electHost();
+        }
+      }
+    }
+
+    function broadcastToAll(message) {
+      for (const [, p] of state.peers) {
+        if (p.dataConn && p.dataConn.open) {
+          try { p.dataConn.send(message); } catch(_) {}
+        }
+      }
+    }
+
+    /* ===========================================
+       HOST ELECTION
+       =========================================== */
+    function electHost() {
+      let earliest = { id: state.myPeerId, time: state.joinTime };
+      for (const [pid, p] of state.peers) {
+        if (p.joinTime && p.joinTime < earliest.time) {
+          earliest = { id: pid, time: p.joinTime };
+        }
+      }
+      state.hostId = earliest.id;
+      if (earliest.id === state.myPeerId) {
+        showToast('You are now the host', 'success');
+        // Take over door peer
+        if (!state.doorPeer || state.doorPeer.destroyed) {
+          createDoorPeer(state.roomCode).catch(() => {});
+        }
+      }
+      broadcastToAll({ type: 'host-changed', hostId: state.hostId });
+      renderPeers();
+    }
+
+    /* ===========================================
+       ROOM MANAGEMENT
+       =========================================== */
+    async function createRoom() {
+      const username = $('#username-input').value.trim();
+      if (!username) {
+        $('#join-error').textContent = 'Please enter a display name';
+        return;
+      }
+
+      const code = generateCode(6);
+      state.username = username;
+      state.roomCode = code;
+      state.joinTime = Date.now();
+
+      $('#create-room-btn').disabled = true;
+      $('#join-room-btn').disabled = true;
+      $('#create-room-btn').innerHTML = '<span class="spinner"></span> Creating...';
+      $('#join-error').textContent = '';
+
+      try {
+        await createPersonalPeer();
+        await createDoorPeer(code);
+
+        state.hostId = state.myPeerId;
+        state.isInRoom = true;
+        window.location.hash = code;
+
+        showScreen('room-screen');
+        updateRoomInfo();
+        renderPeers();
+
+        showToast(`Room created: ${code.toUpperCase()}`, 'success');
+      } catch (err) {
+        console.error('Create room error:', err);
+        let msg = 'Failed to create room';
+        if (err.type === 'unavailable-id') msg = 'Room code collision — try again';
+        else if (err.message) msg = err.message;
+        $('#join-error').textContent = msg;
+        cleanup();
+      } finally {
+        $('#create-room-btn').disabled = false;
+        $('#join-room-btn').disabled = false;
+        $('#create-room-btn').innerHTML = 'Create Room';
+      }
+    }
+
+    async function joinRoom(code) {
+      const username = $('#username-input').value.trim();
+      if (!username) {
+        $('#join-error').textContent = 'Please enter a display name';
+        return;
+      }
+      if (!code) {
+        $('#join-error').textContent = 'Please enter a room code';
+        return;
+      }
+
+      code = sanitizeCode(code);
+      state.username = username;
+      state.roomCode = code;
+      state.joinTime = Date.now();
+
+      $('#create-room-btn').disabled = true;
+      $('#join-room-btn').disabled = true;
+      $('#join-room-btn').innerHTML = '<span class="spinner"></span>';
+      $('#join-error').textContent = '';
+
+      try {
+        await createPersonalPeer();
+
+        const peerList = await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Room not found or host is unavailable')), CONFIG.JOIN_TIMEOUT);
+
+          const doorConn = state.personalPeer.connect(doorId(code), { reliable: true });
+
+          doorConn.on('open', () => {
+            doorConn.send({ type: 'join-request', username: state.username, peerId: state.myPeerId });
+          });
+
+          doorConn.on('data', (data) => {
+            if (data.type === 'welcome') {
+              clearTimeout(timeout);
+              resolve(data);
+              setTimeout(() => { try { doorConn.close(); } catch(_) {} }, 1000);
+            }
+          });
+
+          doorConn.on('error', (err) => {
+            clearTimeout(timeout);
+            reject(new Error('Room not found'));
+          });
+        });
+
+        state.hostId = peerList.hostId;
+        state.isInRoom = true;
+        window.location.hash = code;
+
+        showScreen('room-screen');
+        updateRoomInfo();
+
+        for (const p of peerList.peers) {
+          if (p.id !== state.myPeerId) {
+            state.peers.set(p.id, {
+              username: p.username,
+              joinTime: p.joinTime,
+              dataConn: null,
+            });
+          }
+        }
+
+        renderPeers();
+
+        for (const p of peerList.peers) {
+          if (p.id !== state.myPeerId) {
+            connectToPeerDirect(p.id);
+          }
+        }
+
+        playJoinSound();
+        showToast(`Joined room ${code.toUpperCase()}`, 'success');
+      } catch (err) {
+        console.error('Join room error:', err);
+        $('#join-error').textContent = err.message || 'Failed to join room';
+        cleanup();
+      } finally {
+        $('#create-room-btn').disabled = false;
+        $('#join-room-btn').disabled = false;
+        $('#join-room-btn').innerHTML = 'Join';
+      }
+    }
+
+    function leaveRoom() {
+      broadcastToAll({ type: 'bye' });
+      cleanup();
+      showScreen('join-screen');
+      window.location.hash = '';
+    }
+
+    function cleanup() {
+      state.isInRoom = false;
+      for (const [, p] of state.peers) {
+        stopHeartbeat(p);
+        if (p.dataConn) { try { p.dataConn.close(); } catch(_) {} }
+      }
+      state.peers.clear();
+      state.helloSent.clear();
+
+      // Revoke blob URLs
+      for (const [, t] of state.transfers) {
+        if (t.blobUrl) URL.revokeObjectURL(t.blobUrl);
+      }
+      state.transfers.clear();
+
+      if (state.personalPeer) { try { state.personalPeer.destroy(); } catch(_) {} state.personalPeer = null; }
+      if (state.doorPeer) { try { state.doorPeer.destroy(); } catch(_) {} state.doorPeer = null; }
+
+      state.myPeerId = null;
+      state.hostId = null;
+    }
+
+    /* ===========================================
+       DRAG & DROP
+       =========================================== */
+    function setupDragDrop() {
+      const dz = $('#drop-zone');
+      const fileInput = $('#file-input');
+
+      dz.addEventListener('click', () => {
+        if (state.peers.size === 0) {
+          showToast('No peers connected yet', 'warning');
+          return;
+        }
+        fileInput.click();
+      });
+
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+          sendFilesToAllPeers(e.target.files);
+          fileInput.value = '';
+        }
+      });
+
+      dz.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.classList.add('dragover');
+      });
+
+      dz.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.classList.remove('dragover');
+      });
+
+      dz.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.classList.remove('dragover');
+        if (state.peers.size === 0) {
+          showToast('No peers connected yet', 'warning');
+          return;
+        }
+        if (e.dataTransfer.files.length > 0) {
+          sendFilesToAllPeers(e.dataTransfer.files);
+        }
+      });
+
+      // Prevent body drops
+      document.body.addEventListener('dragover', (e) => e.preventDefault());
+      document.body.addEventListener('drop', (e) => e.preventDefault());
+    }
+
+    /* ===========================================
+       EVENT LISTENERS
+       =========================================== */
+    function init() {
+      // Join screen
+      $('#create-room-btn').addEventListener('click', createRoom);
+      $('#join-room-btn').addEventListener('click', () => joinRoom($('#room-code-input').value));
+      $('#room-code-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') joinRoom($('#room-code-input').value);
+      });
+      $('#username-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') createRoom();
+      });
+
+      // Room screen
+      $('#copy-link-btn').addEventListener('click', () => {
+        const url = `${window.location.origin}${window.location.pathname}#${state.roomCode}`;
+        navigator.clipboard.writeText(url).then(() => showToast('Link copied!', 'success')).catch(() => showToast('Failed to copy', 'error'));
+      });
+
+      $('#pick-file-btn').addEventListener('click', () => {
+        if (state.peers.size === 0) {
+          showToast('No peers connected yet', 'warning');
+          return;
+        }
+        $('#file-input').click();
+      });
+
+      $('#leave-btn').addEventListener('click', leaveRoom);
+
+      $('#clear-history-btn').addEventListener('click', () => {
+        // Only clear completed/errored transfers
+        for (const [tid, t] of state.transfers) {
+          if (t.status !== 'active') {
+            if (t.blobUrl) URL.revokeObjectURL(t.blobUrl);
+            state.transfers.delete(tid);
+          }
+        }
+        renderTransfers();
+      });
+
+      setupDragDrop();
+
+      // Check for room code in URL hash
+      const hash = window.location.hash.slice(1);
+      if (hash) {
+        $('#room-code-input').value = hash;
+      }
+
+      // Try to restore username
+      const savedName = localStorage.getItem('webfile-username');
+      if (savedName) {
+        $('#username-input').value = savedName;
+      }
+
+      // Save username on change
+      $('#username-input').addEventListener('input', () => {
+        localStorage.setItem('webfile-username', $('#username-input').value);
+      });
+    }
+
+    init();
+    })();
+    </script>
+</body>
+</html>
